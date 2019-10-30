@@ -188,6 +188,9 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 
 	// get containers
 	containers, err := p.getContainers(pod, false)
+	if err != nil {
+		return err
+	}
 	initContainers, err := p.getContainers(pod, true)
 	if err != nil {
 		return err
@@ -584,10 +587,11 @@ func (p *ECIProvider) getContainers(pod *v1.Pod, init bool) ([]eci.CreateContain
 			})
 		}
 
-		c.EnvironmentVars = make([]eci.EnvironmentVar, 0, len(container.Env))
-		for _, e := range container.Env {
-			c.EnvironmentVars = append(c.EnvironmentVars, eci.EnvironmentVar{Key: e.Name, Value: e.Value})
+		envs, err := p.makeEnvironmentVariables(pod, &container)
+		if err != nil {
+			return nil, err
 		}
+		c.EnvironmentVars = envs
 
 		cpuRequest := 1.00
 		if _, ok := container.Resources.Requests[v1.ResourceCPU]; ok {
@@ -609,6 +613,154 @@ func (p *ECIProvider) getContainers(pod *v1.Pod, init bool) ([]eci.CreateContain
 		containers = append(containers, c)
 	}
 	return containers, nil
+}
+
+func (p *ECIProvider) makeEnvironmentVariables(pod *v1.Pod, container *v1.Container) ([]eci.EnvironmentVar, error) {
+	var (
+		configMaps = make(map[string]*v1.ConfigMap)
+		secrets    = make(map[string]*v1.Secret)
+		tmpEnv     = make(map[string]string)
+		err        error
+	)
+	// Env will override EnvFrom variables.
+	// Process EnvFrom first then allow Env to replace existing values.
+	for _, envFrom := range container.EnvFrom {
+		switch {
+		case envFrom.ConfigMapRef != nil:
+			cm := envFrom.ConfigMapRef
+			name := cm.Name
+			configMap, ok := configMaps[name]
+			if !ok {
+				optional := cm.Optional != nil && *cm.Optional
+				configMap, err = p.resourceManager.GetConfigMap(name, pod.Namespace)
+				if err != nil {
+					if k8serr.IsNotFound(err) && optional {
+						// ignore error when marked optional
+						continue
+					}
+					return nil, err
+				}
+				configMaps[name] = configMap
+			}
+
+			for k, v := range configMap.Data {
+				if len(envFrom.Prefix) > 0 {
+					k = envFrom.Prefix + k
+				}
+				tmpEnv[k] = v
+			}
+		case envFrom.SecretRef != nil:
+			s := envFrom.SecretRef
+			name := s.Name
+			secret, ok := secrets[name]
+			if !ok {
+				optional := s.Optional != nil && *s.Optional
+				secret, err = p.resourceManager.GetSecret(name, pod.Namespace)
+				if err != nil {
+					if k8serr.IsNotFound(err) && optional {
+						// ignore error when marked optional
+						continue
+					}
+					return nil, err
+				}
+				secrets[name] = secret
+			}
+
+			for k, v := range secret.Data {
+				if len(envFrom.Prefix) > 0 {
+					k = envFrom.Prefix + k
+				}
+				tmpEnv[k] = string(v)
+			}
+		}
+	}
+
+	for _, e := range container.Env {
+		var runtimeVal string
+		if len(e.Value) != 0 {
+			runtimeVal = e.Value
+		} else if e.ValueFrom != nil {
+			switch {
+			case e.ValueFrom.FieldRef != nil:
+				fp := e.ValueFrom.FieldRef.FieldPath
+				switch fp {
+				case "spec.nodeName":
+					runtimeVal = p.nodeName
+				case "spec.serviceAccountName":
+					runtimeVal = pod.Spec.ServiceAccountName
+				case "status.hostIP":
+					runtimeVal = p.internalIP
+				case "status.podIP":
+					// FIXME: how to get podIP before its creation?
+					// runtimeVal = pod.Status.PodIP
+					continue
+				default:
+					runtimeVal, err = ExtractFieldPathAsString(pod, fp)
+					if err != nil {
+						return nil, err
+					}
+				}
+			case e.ValueFrom.ResourceFieldRef != nil:
+				// FIXME: the resource requests and limits specified in pods are not the actual values applied in eci
+				continue
+			case e.ValueFrom.ConfigMapKeyRef != nil:
+				cm := e.ValueFrom.ConfigMapKeyRef
+				optional := cm.Optional != nil && *cm.Optional
+				key, name := cm.Key, cm.Name
+				configMap, ok := configMaps[name]
+				if !ok {
+					configMap, err = p.resourceManager.GetConfigMap(name, pod.Namespace)
+					if err != nil {
+						if k8serr.IsNotFound(err) && optional {
+							continue
+						}
+						return nil, err
+					}
+					configMaps[name] = configMap
+				}
+				runtimeVal, ok = configMap.Data[key]
+				if !ok {
+					if optional {
+						continue
+					}
+					return nil, fmt.Errorf("couldn't find key %v in ConfigMap %v/%v", key, pod.Namespace, name)
+				}
+			case e.ValueFrom.SecretKeyRef != nil:
+				s := e.ValueFrom.SecretKeyRef
+				optional := s.Optional != nil && *s.Optional
+				key, name := s.Key, s.Name
+				secret, ok := secrets[name]
+				if !ok {
+					secret, err = p.resourceManager.GetSecret(name, pod.Namespace)
+					if err != nil {
+						if k8serr.IsNotFound(err) && optional {
+							continue
+						}
+						return nil, err
+					}
+					secrets[name] = secret
+				}
+				valueBytes, ok := secret.Data[key]
+				if !ok {
+					if optional {
+						continue
+					}
+					return nil, fmt.Errorf("couldn't find key %v in Secret %v/%v", key, pod.Namespace, name)
+				}
+				runtimeVal = string(valueBytes)
+			}
+		}
+		tmpEnv[e.Name] = runtimeVal
+	}
+
+	envs := make([]eci.EnvironmentVar, 0, len(tmpEnv))
+	for k, v := range tmpEnv {
+		envs = append(envs, eci.EnvironmentVar{
+			Key:   k,
+			Value: v,
+		})
+	}
+	return envs, nil
 }
 
 func (p *ECIProvider) getVolumes(pod *v1.Pod) ([]eci.Volume, error) {

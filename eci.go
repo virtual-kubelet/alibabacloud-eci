@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"github.com/virtual-kubelet/alibabacloud-eci/eci"
 	"github.com/virtual-kubelet/virtual-kubelet/errdefs"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	"github.com/virtual-kubelet/virtual-kubelet/manager"
@@ -27,6 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/virtual-kubelet/alibabacloud-eci/eci"
 )
 
 // The service account secret mount path.
@@ -175,7 +176,7 @@ func NewECIProvider(config string, rm *manager.ResourceManager, nodeName, operat
 // CreatePod accepts a Pod definition and creates
 // an ECI deployment
 func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
-	//Ignore daemonSet Pod
+	// Ignore daemonSet Pod
 	if pod != nil && pod.OwnerReferences != nil && len(pod.OwnerReferences) != 0 && pod.OwnerReferences[0].Kind == "DaemonSet" {
 		msg := fmt.Sprintf("Skip to create DaemonSet pod %q", pod.Name)
 		log.G(ctx).WithField("Method", "CreatePod").Info(msg)
@@ -480,9 +481,6 @@ func (p *ECIProvider) getImagePullSecrets(pod *v1.Pod) ([]eci.ImageRegistryCrede
 		if secret == nil {
 			return nil, fmt.Errorf("error getting image pull secret")
 		}
-		// TODO: Check if secret type is v1.SecretTypeDockercfg and use DockerConfigKey instead of hardcoded value
-		// TODO: Check if secret type is v1.SecretTypeDockerConfigJson and use DockerConfigJsonKey to determine if it's in json format
-		// TODO: Return error if it's not one of these two types
 		switch secret.Type {
 		case v1.SecretTypeDockercfg:
 			ips, err = readDockerCfgSecret(secret, ips)

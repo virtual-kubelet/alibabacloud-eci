@@ -1,8 +1,7 @@
 module github.com/virtual-kubelet/alibabacloud-eci
 
-go 1.12
-
 require (
+	contrib.go.opencensus.io/exporter/jaeger v0.2.0
 	contrib.go.opencensus.io/exporter/ocagent v0.5.0
 	github.com/BurntSushi/toml v0.3.1
 	github.com/aliyun/alibaba-cloud-sdk-go v0.0.0-20190614054433-c6dd452c6c95
@@ -21,24 +20,22 @@ require (
 	github.com/spf13/pflag v1.0.3
 	github.com/virtual-kubelet/virtual-kubelet v0.10.0
 	go.opencensus.io v0.21.0
-	golang.org/x/oauth2 v0.0.0-20190402181905-9f3314589c9a // indirect
-	google.golang.org/appengine v1.5.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	k8s.io/api v0.0.0-20190612125737-db0771252981
-	k8s.io/apimachinery v0.0.0-20190612125636-6a5db36e93ad
-	k8s.io/apiserver v0.0.0-20190614170213-5c4672425150 // indirect
+	k8s.io/api v0.0.0
+	k8s.io/apimachinery v0.0.0
+	k8s.io/apiserver v0.0.0-20190805142138-368b2058237c // indirect
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog v0.3.3
 	k8s.io/kubernetes v1.14.3 // indirect
 	k8s.io/utils v0.0.0-20190607212802-c55fbcfc754a // indirect
 )
 
-replace k8s.io/api => k8s.io/api v0.0.0-20190606204050-af9c91bd2759
+replace k8s.io/api => k8s.io/api v0.0.0-20190805141119-fdd30b57c827
 
-replace k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190404173353-6a84e37a896d
+replace k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190612205821-1799e75a0719
 
-replace k8s.io/client-go => k8s.io/client-go v11.0.1-0.20190606204521-b8faab9c5193+incompatible
+replace k8s.io/client-go => k8s.io/client-go v0.0.0-20190805141520-2fe0317bcee0
 
 replace k8s.io/kubernetes => k8s.io/kubernetes v1.14.3
 
-replace go.opencensus.io => go.opencensus.io v0.19.3
+go 1.13

@@ -21,9 +21,9 @@ require (
 	github.com/virtual-kubelet/virtual-kubelet v0.10.0
 	go.opencensus.io v0.21.0
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	k8s.io/api v0.0.0
-	k8s.io/apimachinery v0.0.0
-	k8s.io/apiserver v0.0.0-20190805142138-368b2058237c // indirect
+	k8s.io/api v0.15.10
+	k8s.io/apimachinery v0.15.10
+	k8s.io/apiserver v0.15.10 // indirect
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog v0.3.3
 	k8s.io/kubernetes v1.14.3 // indirect
